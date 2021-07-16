@@ -19,6 +19,7 @@ metadata:
   namespace: kube-system
   labels:
     app: csi-hostpath-provisioner
+    addonmanager.kubernetes.io/mode: Reconcile
 spec:
   selector:
     app: csi-hostpath-provisioner 
@@ -32,6 +33,8 @@ apiVersion: apps/v1
 metadata:
   name: csi-hostpath-provisioner
   namespace: kube-system
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
 spec:
   serviceName: "csi-hostpath-provisioner"
   replicas: 1
@@ -42,6 +45,7 @@ spec:
     metadata:
       labels:
         app: csi-hostpath-provisioner
+        addonmanager.kubernetes.io/mode: Reconcile
         kubernetes.io/minikube-addons: csi-hostpath-driver
     spec:
       affinity:
@@ -57,7 +61,7 @@ spec:
       serviceAccountName: csi-provisioner
       containers:
         - name: csi-provisioner
-          image: {{default "gcr.io/k8s-staging-sig-storage" .ImageRepository}}/csi-provisioner:v2.0.0-rc2
+          image: {{.CustomRegistries.Provisioner  | default .ImageRepository | default .Registries.Provisioner }}{{.Images.Provisioner}}
           args:
             - -v=5
             - --csi-address=/csi/csi.sock

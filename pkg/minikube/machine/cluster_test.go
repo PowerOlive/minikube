@@ -75,7 +75,7 @@ func TestCreateHost(t *testing.T) {
 	tempDir := tests.MakeTempDir()
 	defer tests.RemoveTempDir(tempDir)
 
-	download.EnableMock(true)
+	download.DownloadMock = download.CreateDstDownloadMock
 
 	RegisterMockDriver(t)
 	api := tests.NewMockAPI(t)
@@ -123,7 +123,7 @@ func TestStartHostExists(t *testing.T) {
 	tempDir := tests.MakeTempDir()
 	defer tests.RemoveTempDir(tempDir)
 
-	download.EnableMock(true)
+	download.DownloadMock = download.CreateDstDownloadMock
 
 	RegisterMockDriver(t)
 	api := tests.NewMockAPI(t)
@@ -146,10 +146,8 @@ func TestStartHostExists(t *testing.T) {
 	mc := defaultClusterConfig
 	mc.Name = ih.Name
 
-	n := config.Node{Name: ih.Name}
-
 	// This should pass without calling Create because the host exists already.
-	h, _, err := StartHost(api, &mc, &n)
+	h, _, err := StartHost(api, &mc, &(mc.Nodes[0]))
 	if err != nil {
 		t.Fatalf("Error starting host: %v", err)
 	}
@@ -165,7 +163,7 @@ func TestStartHostErrMachineNotExist(t *testing.T) {
 	tempDir := tests.MakeTempDir()
 	defer tests.RemoveTempDir(tempDir)
 
-	download.EnableMock(true)
+	download.DownloadMock = download.CreateDstDownloadMock
 
 	RegisterMockDriver(t)
 	api := tests.NewMockAPI(t)
@@ -215,7 +213,7 @@ func TestStartStoppedHost(t *testing.T) {
 	tempDir := tests.MakeTempDir()
 	defer tests.RemoveTempDir(tempDir)
 
-	download.EnableMock(true)
+	download.DownloadMock = download.CreateDstDownloadMock
 
 	RegisterMockDriver(t)
 	api := tests.NewMockAPI(t)
@@ -255,7 +253,7 @@ func TestStartHost(t *testing.T) {
 	tempDir := tests.MakeTempDir()
 	defer tests.RemoveTempDir(tempDir)
 
-	download.EnableMock(true)
+	download.DownloadMock = download.CreateDstDownloadMock
 
 	RegisterMockDriver(t)
 	api := tests.NewMockAPI(t)
@@ -288,7 +286,7 @@ func TestStartHostConfig(t *testing.T) {
 	tempDir := tests.MakeTempDir()
 	defer tests.RemoveTempDir(tempDir)
 
-	download.EnableMock(true)
+	download.DownloadMock = download.CreateDstDownloadMock
 
 	RegisterMockDriver(t)
 	api := tests.NewMockAPI(t)

@@ -63,8 +63,20 @@ func Profile(name string) string {
 }
 
 // EventLog returns the path to a CloudEvents log
+// This log contains the transient state of minikube and the completed steps on start.
 func EventLog(name string) string {
 	return filepath.Join(Profile(name), "events.json")
+}
+
+// AuditLog returns the path to the audit log.
+// This log contains a history of commands run, by who, when, and what arguments.
+func AuditLog() string {
+	return filepath.Join(MiniPath(), "logs", "audit.json")
+}
+
+// LastStartLog returns the path to the last start log.
+func LastStartLog() string {
+	return filepath.Join(MiniPath(), "logs", "lastStart.txt")
 }
 
 // ClientCert returns client certificate path, used by kubeconfig
@@ -130,12 +142,12 @@ func MachinePath(machine string, miniHome ...string) string {
 func SanitizeCacheDir(image string) string {
 	if runtime.GOOS == "windows" && hasWindowsDriveLetter(image) {
 		// not sanitize Windows drive letter.
-		s := image[:2] + strings.Replace(image[2:], ":", "_", -1)
+		s := image[:2] + strings.ReplaceAll(image[2:], ":", "_")
 		klog.Infof("windows sanitize: %s -> %s", image, s)
 		return s
 	}
 	// ParseReference cannot have a : in the directory path
-	return strings.Replace(image, ":", "_", -1)
+	return strings.ReplaceAll(image, ":", "_")
 }
 
 func hasWindowsDriveLetter(s string) bool {
@@ -185,7 +197,7 @@ func getWindowsVolumeNameCmd(d string) (string, error) {
 		return "", err
 	}
 
-	outs := strings.Split(strings.Replace(string(stdout), "\r", "", -1), "\n")
+	outs := strings.Split(strings.ReplaceAll(string(stdout), "\r", ""), "\n")
 
 	var vname string
 	for _, l := range outs {

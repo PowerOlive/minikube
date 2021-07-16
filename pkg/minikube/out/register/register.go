@@ -30,6 +30,7 @@ const (
 	SelectingDriver                   RegStep = "Selecting Driver"
 	DownloadingArtifacts              RegStep = "Downloading Artifacts"
 	StartingNode                      RegStep = "Starting Node"
+	UpdatingDriver                    RegStep = "Updating Driver"
 	PullingBaseImage                  RegStep = "Pulling Base Image"
 	RunningLocalhost                  RegStep = "Running on Localhost"
 	RunningRemotely                   RegStep = "Running Remotely"
@@ -41,6 +42,7 @@ const (
 	PreparingKubernetesCerts          RegStep = "Generating certificates"
 	PreparingKubernetesControlPlane   RegStep = "Booting control plane"
 	PreparingKubernetesBootstrapToken RegStep = "Configuring RBAC rules"
+	ConfiguringCNI                    RegStep = "Configuring CNI"
 	VerifyingKubernetes               RegStep = "Verifying Kubernetes"
 	EnablingAddons                    RegStep = "Enabling Addons"
 	Done                              RegStep = "Done"
@@ -75,6 +77,7 @@ func init() {
 				SelectingDriver,
 				DownloadingArtifacts,
 				StartingNode,
+				UpdatingDriver,
 				PullingBaseImage,
 				RunningLocalhost,
 				LocalOSRelease,
@@ -85,6 +88,7 @@ func init() {
 				PreparingKubernetesCerts,
 				PreparingKubernetesControlPlane,
 				PreparingKubernetesBootstrapToken,
+				ConfiguringCNI,
 				ConfiguringLHEnv,
 				VerifyingKubernetes,
 				EnablingAddons,

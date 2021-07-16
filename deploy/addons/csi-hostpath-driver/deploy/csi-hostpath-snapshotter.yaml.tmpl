@@ -19,6 +19,7 @@ metadata:
   namespace: kube-system
   labels:
     app: csi-hostpath-snapshotter
+    addonmanager.kubernetes.io/mode: Reconcile
 spec:
   selector:
     app: csi-hostpath-snapshotter
@@ -32,16 +33,20 @@ apiVersion: apps/v1
 metadata:
   name: csi-hostpath-snapshotter
   namespace: kube-system
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
 spec:
   serviceName: "csi-hostpath-snapshotter"
   replicas: 1
   selector:
     matchLabels:
       app: csi-hostpath-snapshotter
+      addonmanager.kubernetes.io/mode: Reconcile
   template:
     metadata:
       labels:
         app: csi-hostpath-snapshotter
+        addonmanager.kubernetes.io/mode: Reconcile
         kubernetes.io/minikube-addons: csi-hostpath-driver
     spec:
       affinity:
@@ -57,7 +62,7 @@ spec:
       serviceAccount: csi-snapshotter
       containers:
         - name: csi-snapshotter
-          image: {{default "quay.io/k8scsi" .ImageRepository}}/csi-snapshotter:v2.1.0
+          image: {{.CustomRegistries.Snapshotter  | default .ImageRepository | default .Registries.Snapshotter }}{{.Images.Snapshotter}}
           args:
             - -v=5
             - --csi-address=/csi/csi.sock

@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -31,12 +32,17 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 	configCmd "k8s.io/minikube/cmd/minikube/cmd/config"
 	"k8s.io/minikube/pkg/drivers/kic/oci"
+	"k8s.io/minikube/pkg/minikube/audit"
 	"k8s.io/minikube/pkg/minikube/config"
 	"k8s.io/minikube/pkg/minikube/constants"
+	"k8s.io/minikube/pkg/minikube/detect"
 	"k8s.io/minikube/pkg/minikube/exit"
 	"k8s.io/minikube/pkg/minikube/localpath"
+	"k8s.io/minikube/pkg/minikube/notify"
+	"k8s.io/minikube/pkg/minikube/out"
 	"k8s.io/minikube/pkg/minikube/reason"
 	"k8s.io/minikube/pkg/minikube/translate"
+	"k8s.io/minikube/pkg/version"
 )
 
 var dirs = [...]string{
@@ -44,7 +50,6 @@ var dirs = [...]string{
 	localpath.MakeMiniPath("certs"),
 	localpath.MakeMiniPath("machines"),
 	localpath.MakeMiniPath("cache"),
-	localpath.MakeMiniPath("cache", "iso"),
 	localpath.MakeMiniPath("config"),
 	localpath.MakeMiniPath("addons"),
 	localpath.MakeMiniPath("files"),
@@ -58,9 +63,14 @@ var RootCmd = &cobra.Command{
 	Long:  `minikube provisions and manages local Kubernetes clusters optimized for development workflows.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		for _, path := range dirs {
-			if err := os.MkdirAll(path, 0o777); err != nil {
+			if err := os.MkdirAll(path, 0777); err != nil {
 				exit.Error(reason.HostHomeMkdir, "Error creating minikube directory", err)
 			}
+		}
+		userName := viper.GetString(config.UserFlag)
+		if !validateUsername(userName) {
+			out.WarningT("User name '{{.username}}' is not valid", out.V{"username": userName})
+			exit.Message(reason.Usage, "User name must be 60 chars or less.")
 		}
 	},
 }
@@ -68,7 +78,29 @@ var RootCmd = &cobra.Command{
 // Execute adds all child commands to the root command sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	defer audit.Log(time.Now())
+
+	// Check whether this is a windows binary (.exe) running inisde WSL.
+	if runtime.GOOS == "windows" && detect.IsMicrosoftWSL() {
+		var found = false
+		for _, a := range os.Args {
+			if a == "--force" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			exit.Message(reason.WrongBinaryWSL, "You are trying to run a windows .exe binary inside WSL. For better integration please use a Linux binary instead (Download at https://minikube.sigs.k8s.io/docs/start/.). Otherwise if you still want to do this, you can do it using --force")
+		}
+	}
+
+	if runtime.GOOS == "darwin" && detect.IsAmd64M1Emulation() {
+		out.Infof("You are trying to run amd64 binary on M1 system. Please consider running darwin/arm64 binary instead (Download at {{.url}}.)",
+			out.V{"url": notify.DownloadURL(version.GetVersion(), "darwin", "arm64")})
+	}
+
 	_, callingCmd := filepath.Split(os.Args[0])
+	callingCmd = strings.TrimSuffix(callingCmd, ".exe")
 
 	if callingCmd == "kubectl" {
 		// If the user is using the minikube binary as kubectl, allow them to specify the kubectl context without also specifying minikube profile
@@ -89,6 +121,7 @@ func Execute() {
 			os.Args = append([]string{RootCmd.Use, callingCmd, "--"}, os.Args[1:]...)
 		}
 	}
+
 	for _, c := range RootCmd.Commands() {
 		c.Short = translate.T(c.Short)
 		c.Long = translate.T(c.Long)
@@ -121,7 +154,7 @@ func Execute() {
 
 	if err := RootCmd.Execute(); err != nil {
 		// Cobra already outputs the error, typically because the user provided an unknown command.
-		os.Exit(reason.ExProgramUsage)
+		defer os.Exit(reason.ExProgramUsage)
 	}
 }
 
@@ -170,6 +203,7 @@ func init() {
 
 	RootCmd.PersistentFlags().StringP(config.ProfileName, "p", constants.DefaultClusterName, `The name of the minikube VM being used. This can be set to allow having multiple instances of minikube independently.`)
 	RootCmd.PersistentFlags().StringP(configCmd.Bootstrapper, "b", "kubeadm", "The name of the cluster bootstrapper that will set up the Kubernetes cluster.")
+	RootCmd.PersistentFlags().String(config.UserFlag, "", "Specifies the user executing the operation. Useful for auditing operations executed by 3rd party tools. Defaults to the operating system username.")
 
 	groups := templates.CommandGroups{
 		{
@@ -190,6 +224,7 @@ func init() {
 				dockerEnvCmd,
 				podmanEnvCmd,
 				cacheCmd,
+				imageCmd,
 			},
 		},
 		{
@@ -215,6 +250,7 @@ func init() {
 				sshCmd,
 				kubectlCmd,
 				nodeCmd,
+				cpCmd,
 			},
 		},
 		{
@@ -265,18 +301,18 @@ func setupViper() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	viper.AutomaticEnv()
 
+	viper.RegisterAlias(config.EmbedCerts, embedCerts)
 	viper.SetDefault(config.WantUpdateNotification, true)
 	viper.SetDefault(config.ReminderWaitPeriodInHours, 24)
-	viper.SetDefault(config.WantReportError, false)
-	viper.SetDefault(config.WantReportErrorPrompt, true)
-	viper.SetDefault(config.WantKubectlDownloadMsg, true)
 	viper.SetDefault(config.WantNoneDriverWarning, true)
-	viper.SetDefault(config.ShowDriverDeprecationNotification, true)
-	viper.SetDefault(config.ShowBootstrapperDeprecationNotification, true)
 }
 
 func addToPath(dir string) {
 	new := fmt.Sprintf("%s:%s", dir, os.Getenv("PATH"))
 	klog.Infof("Updating PATH: %s", dir)
 	os.Setenv("PATH", new)
+}
+
+func validateUsername(name string) bool {
+	return len(name) <= 60
 }

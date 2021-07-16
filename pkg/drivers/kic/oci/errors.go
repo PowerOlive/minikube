@@ -36,6 +36,9 @@ func (f *FailFastError) Error() string {
 // ErrWindowsContainers is thrown when docker been configured to run windows containers instead of Linux
 var ErrWindowsContainers = &FailFastError{errors.New("docker container type is windows")}
 
+// ErrMinDockerVersion is thrown when docker version is less than minimum requited by Minikube
+var ErrMinDockerVersion = &FailFastError{errors.New("docker version is less than the minimum required")}
+
 // ErrCPUCountLimit is thrown when docker daemon doesn't have enough CPUs for the requested container
 var ErrCPUCountLimit = &FailFastError{errors.New("not enough CPUs is available for container")}
 
@@ -51,6 +54,9 @@ var ErrDaemonInfo = errors.New("daemon info not responding")
 // ErrInsufficientDockerStorage is thrown when there is not more storage for docker
 var ErrInsufficientDockerStorage = &FailFastError{errors.New("insufficient docker storage, no space left on device")}
 
+// ErrVolumeNotFound is when given volume was not found
+var ErrVolumeNotFound = errors.New("kic volume not found")
+
 // ErrNetworkSubnetTaken is thrown when a subnet is taken by another network
 var ErrNetworkSubnetTaken = errors.New("subnet is taken")
 
@@ -62,6 +68,12 @@ var ErrNetworkGatewayTaken = errors.New("network gateway is taken")
 
 // ErrNetworkInUse is when trying to delete a network which is attached to another container
 var ErrNetworkInUse = errors.New("unable to delete a network that is attached to a running container")
+
+// ErrGetSSHPortContainerNotRunning happens when you try to inspect a container (in order to get SSH port) that "exists" but is no longer running
+var ErrGetSSHPortContainerNotRunning = errors.New("unable to inspect a not running container to get SSH port")
+
+// ErrGetPortContainerNotRunning happens when you try to inspect a container (in order to get Port) that "exists" but is no longer running
+var ErrGetPortContainerNotRunning = errors.New("unable to inspect a not running container to get port")
 
 // LogContainerDebug will print relevant docker/podman infos after a container fails
 func LogContainerDebug(ociBin string, name string) string {

@@ -19,6 +19,7 @@ metadata:
   namespace: kube-system
   labels:
     app: csi-hostpath-attacher
+    addonmanager.kubernetes.io/mode: Reconcile
 spec:
   selector:
     app: csi-hostpath-attacher
@@ -42,6 +43,7 @@ spec:
     metadata:
       labels:
         app: csi-hostpath-attacher
+        addonmanager.kubernetes.io/mode: Reconcile
         kubernetes.io/minikube-addons: csi-hostpath-driver
     spec:
       affinity:
@@ -57,7 +59,7 @@ spec:
       serviceAccountName: csi-attacher
       containers:
         - name: csi-attacher
-          image: {{default "quay.io/k8scsi" .ImageRepository}}/csi-attacher:v3.0.0-rc1
+          image: {{.CustomRegistries.Attacher  | default .ImageRepository | default .Registries.Attacher }}{{.Images.Attacher}}
           args:
             - --v=5
             - --csi-address=/csi/csi.sock

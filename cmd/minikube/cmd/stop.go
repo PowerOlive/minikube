@@ -61,14 +61,10 @@ func init() {
 	stopCmd.Flags().BoolVar(&keepActive, "keep-context-active", false, "keep the kube-context active after cluster is stopped. Defaults to false.")
 	stopCmd.Flags().DurationVar(&scheduledStopDuration, "schedule", 0*time.Second, "Set flag to stop cluster after a set amount of time (e.g. --schedule=5m)")
 	stopCmd.Flags().BoolVar(&cancelScheduledStop, "cancel-scheduled", false, "cancel any existing scheduled stop requests")
-
-	if err := stopCmd.Flags().MarkHidden("schedule"); err != nil {
-		klog.Info("unable to mark --schedule flag as hidden")
-	}
 	stopCmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Format to print stdout in. Options include: [text,json]")
 
 	if err := viper.GetViper().BindPFlags(stopCmd.Flags()); err != nil {
-		exit.Error(reason.InternalFlagsBind, "unable to bind flags", err)
+		exit.Error(reason.InternalBindFlags, "unable to bind flags", err)
 	}
 }
 
@@ -170,7 +166,7 @@ func stop(api libmachine.API, machineName string) bool {
 
 		switch err := errors.Cause(err).(type) {
 		case mcnerror.ErrHostDoesNotExist:
-			out.Step(style.Meh, `"{{.machineName}}" does not exist, nothing to stop`, out.V{"machineName": machineName})
+			out.Styled(style.Meh, `"{{.machineName}}" does not exist, nothing to stop`, out.V{"machineName": machineName})
 			nonexistent = true
 			return nil
 		default:

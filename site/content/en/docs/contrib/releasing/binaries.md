@@ -12,6 +12,11 @@ description: >
 * Two minikube repos checked out locally:
   * Your personal fork
   * Upstream  
+  
+## Update the Kubernetes version
+
+* Run `make update-kubernetes-version` from your local upstream repo copy
+* If any files are updated, create and merge a PR before moving forward  
 
 ## Build a new ISO
 
@@ -22,10 +27,7 @@ See [ISO release instructions]({{<ref "iso.md">}})
 
 ## Release new kicbase image
 
-If there are changes to the Dockerfile for the docker and/or podman drivers
-(and there is a -snapshot image), you should retag it as a new version and push it to GCR, dockerhub and github packages.
-
-For example, if you are releasing v0.0.13 and the current kicbase image tag is v0.0.12-snapshot, you should tag v0.0.13 and change [kic/types.go](https://github.com/medyagh/minikube/blob/635ff53a63e5bb1be4e1abb9067ebe502a16224e/pkg/drivers/kic/types.go#L29-L30) as well.
+Run the `kic-release` job in Jenkins, which will automatically create a PR which must be merged (make sure to enter the correct version and repos).
 
 ## Update Release Notes
 
@@ -55,6 +57,9 @@ Update the version numbers in  `Makefile`:
   - beta releases use: `v$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_BUILD)`
   - major/minor releases use: `v$(VERSION_MAJOR).$(VERSION_MINOR).0`
   - if the ISO was updated, a patch release may use `v$(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_BUILD)`
+* `DEB_REVISION`, `RPM_REVISION`
+  - for all major/minor releases, set to 0
+  - if updating .deb/.rpm files without a major/minor release, increment by 1
 
 {{% alert title="Warning" color="warning" %}}
 Merge this PR only if all non-experimental integration tests pass!

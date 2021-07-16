@@ -31,6 +31,7 @@ import (
 	"k8s.io/minikube/pkg/minikube/reason"
 )
 
+// TestJSONOutput makes sure json output works properly for the start, pause, unpause, and stop commands
 func TestJSONOutput(t *testing.T) {
 	profile := UniqueProfileName("json-output")
 	ctx, cancel := context.WithTimeout(context.Background(), Minutes(40))
@@ -54,7 +55,7 @@ func TestJSONOutput(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.command, func(t *testing.T) {
-			args := []string{test.command, "-p", profile, "--output=json"}
+			args := []string{test.command, "-p", profile, "--output=json", "--user=testUser"}
 			args = append(args, test.args...)
 
 			rr, err := Run(t, exec.CommandContext(ctx, Target(), args...))
@@ -66,6 +67,16 @@ func TestJSONOutput(t *testing.T) {
 			if err != nil {
 				t.Fatalf("converting to cloud events: %v\n", err)
 			}
+
+			t.Run("Audit", func(t *testing.T) {
+				got, err := auditContains("testUser")
+				if err != nil {
+					t.Fatalf("failed to check audit log: %v", err)
+				}
+				if !got {
+					t.Errorf("audit.json does not contain the user testUser")
+				}
+			})
 
 			type validateJSONOutputFunc func(context.Context, *testing.T, []*cloudEvent)
 			t.Run("parallel", func(t *testing.T) {
@@ -88,12 +99,12 @@ func TestJSONOutput(t *testing.T) {
 	}
 }
 
-//  make sure each step has a distinct step number
+//  validateDistinctCurrentSteps makes sure each step has a distinct step number
 func validateDistinctCurrentSteps(ctx context.Context, t *testing.T, ces []*cloudEvent) {
 	steps := map[string]string{}
 	for _, ce := range ces {
 		currentStep, exists := ce.data["currentstep"]
-		if !exists {
+		if !exists || ce.Type() != "io.k8s.sigs.minikube.step" {
 			continue
 		}
 		if msg, alreadySeen := steps[currentStep]; alreadySeen {
@@ -103,12 +114,12 @@ func validateDistinctCurrentSteps(ctx context.Context, t *testing.T, ces []*clou
 	}
 }
 
-// for successful minikube start, 'current step' should be increasing
+// validateIncreasingCurrentSteps verifies that for a successful minikube start, 'current step' should be increasing
 func validateIncreasingCurrentSteps(ctx context.Context, t *testing.T, ces []*cloudEvent) {
 	step := -1
 	for _, ce := range ces {
 		currentStep, exists := ce.data["currentstep"]
-		if !exists {
+		if !exists || ce.Type() != "io.k8s.sigs.minikube.step" {
 			continue
 		}
 		cs, err := strconv.Atoi(currentStep)
@@ -122,7 +133,8 @@ func validateIncreasingCurrentSteps(ctx context.Context, t *testing.T, ces []*cl
 	}
 }
 
-func TestJSONOutputError(t *testing.T) {
+// TestErrorJSONOutput makes sure json output can print errors properly
+func TestErrorJSONOutput(t *testing.T) {
 	profile := UniqueProfileName("json-output-error")
 	ctx, cancel := context.WithTimeout(context.Background(), Minutes(2))
 	defer Cleanup(t, profile, cancel)
@@ -144,8 +156,8 @@ func TestJSONOutputError(t *testing.T) {
 	if last.Type() != register.NewError("").Type() {
 		t.Fatalf("last cloud event is not of type error: %v", last)
 	}
-	last.validateData(t, "exitcode", fmt.Sprintf("%v", reason.ExDriverUnsupported))
-	last.validateData(t, "message", fmt.Sprintf("The driver 'fail' is not supported on %s", runtime.GOOS))
+	last.checkData(t, "exitcode", fmt.Sprintf("%v", reason.ExDriverUnsupported))
+	last.checkData(t, "message", fmt.Sprintf("The driver 'fail' is not supported on %s/%s", runtime.GOOS, runtime.GOARCH))
 }
 
 type cloudEvent struct {
@@ -165,7 +177,7 @@ func newCloudEvent(t *testing.T, ce cloudevents.Event) *cloudEvent {
 	}
 }
 
-func (c *cloudEvent) validateData(t *testing.T, key, value string) {
+func (c *cloudEvent) checkData(t *testing.T, key, value string) {
 	v, ok := c.data[key]
 	if !ok {
 		t.Fatalf("expected key %s does not exist in cloud event", key)

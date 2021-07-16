@@ -42,6 +42,7 @@ import (
 	"k8s.io/minikube/pkg/minikube/download"
 	"k8s.io/minikube/pkg/minikube/driver"
 	"k8s.io/minikube/pkg/minikube/out"
+	"k8s.io/minikube/pkg/minikube/style"
 	"k8s.io/minikube/pkg/minikube/sysinit"
 	"k8s.io/minikube/pkg/util/retry"
 )
@@ -72,6 +73,7 @@ func NewDriver(c Config) *Driver {
 
 // Create a host using the driver's config
 func (d *Driver) Create() error {
+	ctx := context.Background()
 	params := oci.CreateParams{
 		Mounts:        d.NodeConfig.Mounts,
 		Name:          d.NodeConfig.MachineName,
@@ -96,13 +98,23 @@ func (d *Driver) Create() error {
 		params.Network = networkName
 		ip := gateway.To4()
 		// calculate the container IP based on guessing the machine index
-		ip[3] += byte(driver.IndexFromMachineName(d.NodeConfig.MachineName))
+		index := driver.IndexFromMachineName(d.NodeConfig.MachineName)
+		if int(ip[3])+index > 255 {
+			return fmt.Errorf("too many machines to calculate an IP")
+		}
+		ip[3] += byte(index)
 		klog.Infof("calculated static IP %q for the %q container", ip.String(), d.NodeConfig.MachineName)
 		params.IP = ip.String()
 	}
 	drv := d.DriverName()
+
 	listAddr := oci.DefaultBindIPV4
-	if oci.IsExternalDaemonHost(drv) {
+	if d.NodeConfig.ListenAddress != "" && d.NodeConfig.ListenAddress != listAddr {
+		out.Step(style.Tip, "minikube is not meant for production use. You are opening non-local traffic")
+		out.WarningT("Listening to {{.listenAddr}}. This is not recommended and can cause a security vulnerability. Use at your own risk",
+			out.V{"listenAddr": d.NodeConfig.ListenAddress})
+		listAddr = d.NodeConfig.ListenAddress
+	} else if oci.IsExternalDaemonHost(drv) {
 		out.WarningT("Listening to 0.0.0.0 on external docker host {{.host}}. Please be advised",
 			out.V{"host": oci.DaemonHost(drv)})
 		listAddr = "0.0.0.0"
@@ -126,6 +138,10 @@ func (d *Driver) Create() error {
 			ListenAddress: listAddr,
 			ContainerPort: constants.RegistryAddonPort,
 		},
+		oci.PortMapping{
+			ListenAddress: listAddr,
+			ContainerPort: constants.AutoPauseProxyPort,
+		},
 	)
 
 	exists, err := oci.ContainerExists(d.OCIBinary, params.Name, true)
@@ -136,7 +152,7 @@ func (d *Driver) Create() error {
 		// if container was created by minikube it is safe to delete and recreate it.
 		if oci.IsCreatedByMinikube(d.OCIBinary, params.Name) {
 			klog.Info("Found already existing abandoned minikube container, will try to delete.")
-			if err := oci.DeleteContainer(d.OCIBinary, params.Name); err != nil {
+			if err := oci.DeleteContainer(ctx, d.OCIBinary, params.Name); err != nil {
 				klog.Errorf("Failed to delete a conflicting minikube container %s. You might need to restart your %s daemon and delete it manually and try again: %v", params.Name, params.OCIBinary, err)
 			}
 		} else {
@@ -156,7 +172,7 @@ func (d *Driver) Create() error {
 	go func() {
 		defer waitForPreload.Done()
 		// If preload doesn't exist, don't bother extracting tarball to volume
-		if !download.PreloadExists(d.NodeConfig.KubernetesVersion, d.NodeConfig.ContainerRuntime) {
+		if !download.PreloadExists(d.NodeConfig.KubernetesVersion, d.NodeConfig.ContainerRuntime, d.DriverName()) {
 			return
 		}
 		t := time.Now()
@@ -201,6 +217,12 @@ func (d *Driver) prepareSSH() error {
 	if err != nil {
 		return errors.Wrap(err, "create pubkey assetfile ")
 	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			klog.Warningf("error closing the file %s: %v", f.GetSourcePath(), err)
+		}
+	}()
+
 	if err := cmder.Copy(f); err != nil {
 		return errors.Wrap(err, "copying pub key")
 	}
@@ -338,7 +360,7 @@ func (d *Driver) Remove() error {
 		klog.Infof("could not find the container %s to remove it. will try anyways", d.MachineName)
 	}
 
-	if err := oci.DeleteContainer(d.NodeConfig.OCIBinary, d.MachineName); err != nil {
+	if err := oci.DeleteContainer(context.Background(), d.NodeConfig.OCIBinary, d.MachineName); err != nil {
 		if strings.Contains(err.Error(), "is already in progress") {
 			return errors.Wrap(err, "stuck delete")
 		}
@@ -429,7 +451,7 @@ func (d *Driver) Stop() error {
 		// even though we can't stop the cotainers inside, we still wanna stop the minikube container itself
 		klog.Errorf("unable to get container runtime: %v", err)
 	} else {
-		containers, err := runtime.ListContainers(cruntime.ListOptions{Namespaces: constants.DefaultNamespaces})
+		containers, err := runtime.ListContainers(cruntime.ListContainersOptions{Namespaces: constants.DefaultNamespaces})
 		if err != nil {
 			klog.Infof("unable list containers : %v", err)
 		}

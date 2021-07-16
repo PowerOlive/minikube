@@ -26,6 +26,7 @@ import (
 	"testing"
 )
 
+// TestPreload verifies the preload tarballs get pulled in properly by minikube
 func TestPreload(t *testing.T) {
 	if NoneDriver() {
 		t.Skipf("skipping %s - incompatible with none driver", t.Name())
@@ -49,9 +50,15 @@ func TestPreload(t *testing.T) {
 		t.Fatalf("%s failed: %v", rr.Command(), err)
 	}
 
-	// Now, pull the busybox image into the VMs docker daemon
+	// Now, pull the busybox image into minikube
 	image := "busybox"
-	rr, err = Run(t, exec.CommandContext(ctx, Target(), "ssh", "-p", profile, "--", "docker", "pull", image))
+	var cmd *exec.Cmd
+	if ContainerRuntime() == "docker" {
+		cmd = exec.CommandContext(ctx, Target(), "ssh", "-p", profile, "--", "docker", "pull", image)
+	} else {
+		cmd = exec.CommandContext(ctx, Target(), "ssh", "-p", profile, "--", "sudo", "crictl", "pull", image)
+	}
+	rr, err = Run(t, cmd)
 	if err != nil {
 		t.Fatalf("%s failed: %v", rr.Command(), err)
 	}
@@ -65,7 +72,12 @@ func TestPreload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s failed: %v", rr.Command(), err)
 	}
-	rr, err = Run(t, exec.CommandContext(ctx, Target(), "ssh", "-p", profile, "--", "docker", "images"))
+	if ContainerRuntime() == "docker" {
+		cmd = exec.CommandContext(ctx, Target(), "ssh", "-p", profile, "--", "docker", "images")
+	} else {
+		cmd = exec.CommandContext(ctx, Target(), "ssh", "-p", profile, "--", "sudo", "crictl", "image", "ls")
+	}
+	rr, err = Run(t, cmd)
 	if err != nil {
 		t.Fatalf("%s failed: %v", rr.Command(), err)
 	}
